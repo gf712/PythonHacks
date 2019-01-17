@@ -90,7 +90,7 @@ static PyObject* changeFunctionReprToLambda(PyObject *self, PyObject *args) {
 
 	PyObject *function, *new_repr, *test_result;
 	PyTypeObject* function_type = NULL;
-
+	PyFunctionObject* function_obj = NULL;
 
 	if (!PyArg_ParseTuple(args, "OO", &function, &new_repr)) {
 		PyErr_SetString(PyExc_ValueError, "Unexpected number of args");
@@ -102,12 +102,23 @@ static PyObject* changeFunctionReprToLambda(PyObject *self, PyObject *args) {
 		goto FAIL;
 	}
 
+	function_obj = (PyFunctionObject*) function;
+
+    if (new_repr == Py_None) {
+    	if (repr_tracker.find(function_obj) != repr_tracker.end()) {
+    		Py_DECREF(repr_tracker[function_obj]);
+    		repr_tracker.erase(function_obj);
+    	}
+    	Py_TYPE(function)->tp_repr = (reprfunc)func_repr;
+    	Py_RETURN_NONE;
+    }
+
 	if (!PyFunction_Check(new_repr)) {
 		PyErr_SetString(PyExc_TypeError, "expected 'new_repr' to be a function");
 		goto FAIL;
 	}
 
-	test_result = PyObject_CallFunctionObjArgs(new_repr, (PyFunctionObject*) function, NULL);
+	test_result = PyObject_CallFunctionObjArgs(new_repr, function_obj, NULL);
 	if (!test_result){
 		PyErr_SetString(PyExc_TypeError, "Wrong function signature. Expected something like lambda x: x");
 		goto FAIL;		
@@ -123,14 +134,14 @@ static PyObject* changeFunctionReprToLambda(PyObject *self, PyObject *args) {
 		goto FAIL;
 	}
 
-	if (repr_tracker.find((PyFunctionObject*) function) != repr_tracker.end())
+	if (repr_tracker.find(function_obj) != repr_tracker.end())
 		Py_XDECREF(repr_tracker[(PyFunctionObject*) function]);
 
 	function_type = Py_TYPE(function_type);
 
 	Py_INCREF(new_repr);
 
-	repr_tracker[(PyFunctionObject*) function] = new_repr;
+	repr_tracker[function_obj] = new_repr;
 
 	Py_TYPE(function)->tp_repr = (reprfunc)test_repr;
 
