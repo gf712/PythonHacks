@@ -8,11 +8,15 @@ static char module_docstring[] =
 
 static PyObject* changeFunctionName(PyObject *self, PyObject *args) {
 
-	PyObject *type, *old_name, *new_name;
+	PyObject *type = NULL, 
+			 *old_name = NULL,
+			 *new_name = NULL,
+			 *dict = NULL,
+			 *func_obj = NULL;
 
 	if (!PyArg_ParseTuple(args, "OOO", &type, &old_name, &new_name)) {
 		PyErr_SetString(PyExc_ValueError, "Unexpected number of args");
-				goto FAIL;
+		goto FAIL;
 	}
 
 #if PY_MAJOR_VERSION >= 3
@@ -26,29 +30,34 @@ static PyObject* changeFunctionName(PyObject *self, PyObject *args) {
 	}
 	if (PyType_Check(type)) {
 		PyTypeObject *pytype = (PyTypeObject *)type;
-		PyObject* obj = PyDict_GetItem(pytype->tp_dict, old_name);
-		if (obj == NULL) {
+		dict = pytype->tp_dict;
+		func_obj = PyDict_GetItem(dict, old_name);
+		if (func_obj == NULL) {
 			PyErr_SetString(PyExc_ValueError, "object definition does not exist in the given type!");
 			goto FAIL;
 		}
-		PyDict_SetItem(pytype->tp_dict, new_name, obj);
-		PyDict_DelItem(pytype->tp_dict, old_name);
 	}
 
 	else if ( PyModule_Check(type)) {
-		PyObject* module = PyModule_GetDict(type);
-	PyObject* obj = PyDict_GetItem(module, old_name);
-	if (obj == NULL) {
-		PyErr_SetString(PyExc_ValueError, "object definition does not exist in the given module!");
-		goto FAIL;
-	}
-	PyDict_SetItem(module, new_name, obj);
-	PyDict_DelItem(module, old_name);
+		dict = PyModule_GetDict(type);
+		func_obj = PyDict_GetItem(dict, old_name);
+		if (func_obj == NULL) {
+			PyErr_SetString(PyExc_ValueError, "object definition does not exist in the given module!");
+			goto FAIL;
+		}
 	}
 	else {
 		PyErr_SetString(PyExc_ValueError, "'type' is neither a module or a type");
 		goto FAIL;
 	}
+
+	if (PyDict_GetItem(dict, new_name))
+	{
+		PyErr_SetString(PyExc_ValueError, "new_name already exists");
+		goto FAIL;
+	}
+	PyDict_SetItem(dict, new_name, func_obj);
+	PyDict_DelItem(dict, old_name);
 	Py_RETURN_NONE;
 	FAIL:
 		return NULL;
@@ -86,7 +95,9 @@ static PyObject* test_repr(PyFunctionObject* self) {
 
 static PyObject* changeFunctionReprToLambda(PyObject *self, PyObject *args) {
 
-	PyObject *function, *new_repr, *test_result;
+	PyObject *function = NULL, 
+			 *new_repr = NULL, 
+			 *test_result = NULL;
 	PyTypeObject* function_type = NULL;
 	PyFunctionObject* function_obj = NULL;
 
